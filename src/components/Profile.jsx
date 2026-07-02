@@ -2,31 +2,44 @@ import React, { useState, useEffect } from "react";
 import Layout from "./Layout";
 import { useNavigate } from "react-router-dom";
 import firebaseAppConfig from "../util/firebase-config";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import EditProfile from "./EditProfile";
 
 const auth = getAuth(firebaseAppConfig);
-const db   = getFirestore(firebaseAppConfig);
+const db = getFirestore(firebaseAppConfig);
 
 function Profile() {
-  const navigate  = useNavigate();
-  const user      = auth.currentUser;
-  const [profile,  setProfile]  = useState(null);
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [loading,  setLoading]  = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    loadProfile();
-  }, []);
+  const loadProfile = async (currentUser = auth.currentUser) => {
+    if (!currentUser?.uid) return;
 
-  const loadProfile = async () => {
     setLoading(true);
-    const snap = await getDoc(doc(db, "users", user.uid));
-    if (snap.exists()) setProfile(snap.data());
+    const snap = await getDoc(doc(db, "users", currentUser.uid));
+    const data = snap.exists() ? snap.data() : {};
+
+    setProfile({
+      ...data,
+      photoURL: data.photoURL || currentUser?.photoURL || "/images/avatar.png",
+    });
     setLoading(false);
   };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        navigate("/login");
+        return;
+      }
+      loadProfile(currentUser);
+    });
+
+    return () => unsubscribe();
+  }, [navigate]);
 
   // Edit save hone ke baad — fresh data load karo + view mode
   const handleSaved = () => {
@@ -34,29 +47,30 @@ function Profile() {
     loadProfile();
   };
 
-  if (loading) return (
-    <Layout>
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
-      </div>
-    </Layout>
-  );
+  if (loading)
+    return (
+      <Layout>
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </Layout>
+    );
 
   // Edit mode — EditProfile component render karo
-  if (isEditing) return (
-    <EditProfile
-      profile={profile}
-      onSaved={handleSaved}
-      onCancel={() => setIsEditing(false)}
-    />
-  );
+  if (isEditing)
+    return (
+      <EditProfile
+        profile={profile}
+        onSaved={handleSaved}
+        onCancel={() => setIsEditing(false)}
+      />
+    );
 
   // View mode
   return (
     <Layout>
       <div className="min-h-screen bg-gray-100 py-10 px-4">
         <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-lg overflow-hidden">
-
           {/* Header */}
           <div className="p-8 border-b">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -68,7 +82,11 @@ function Profile() {
               {/* Avatar */}
               <div className="flex flex-col items-center">
                 <img
-                  src={profile?.photoURL || "/images/avatar.png"}
+                  src={
+                    profile?.photoURL ||
+                    auth.currentUser?.photoURL ||
+                    "/images/avatar.png"
+                  }
                   alt="Profile"
                   className="w-32 h-32 rounded-full object-cover shadow-lg bg-black/10"
                   onError={(e) => (e.target.src = "/images/avatar.png")}
@@ -85,16 +103,18 @@ function Profile() {
           <div className="p-8">
             <div className="grid md:grid-cols-2 gap-6">
               {[
-                { label: "Full Name",          value: profile?.fullName },
-                { label: "Email",              value: profile?.email    },
-                { label: "Mobile",             value: profile?.mobile   },
-                { label: "Pincode",            value: profile?.pincode  },
-                { label: "City",               value: profile?.city     },
-                { label: "State",              value: profile?.state    },
-                { label: "Country",            value: profile?.country  },
-              ].map(item => (
-                <div key={item.label}
-                  className="bg-gray-50 rounded-xl px-5 py-4 border border-gray-100">
+                { label: "Full Name", value: profile?.fullName },
+                { label: "Email", value: profile?.email },
+                { label: "Mobile", value: profile?.mobile },
+                { label: "Pincode", value: profile?.pincode },
+                { label: "City", value: profile?.city },
+                { label: "State", value: profile?.state },
+                { label: "Country", value: profile?.country },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="bg-gray-50 rounded-xl px-5 py-4 border border-gray-100"
+                >
                   <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1">
                     {item.label}
                   </p>
@@ -125,7 +145,6 @@ function Profile() {
               </button>
             </div>
           </div>
-
         </div>
       </div>
     </Layout>

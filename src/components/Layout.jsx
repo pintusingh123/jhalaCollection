@@ -3,15 +3,16 @@ import { Link } from "react-router-dom";
 import Footer from "./Footer";
 
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 import firebaseAppConfig from "../util/firebase-config";
 
 const auth = getAuth(firebaseAppConfig);
+const db = getFirestore(firebaseAppConfig);
 
 function Layout({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   const [session, setSession] = useState(null);
-  // profile menu state
-
+  const [profile, setProfile] = useState(null);
   const [desktopProfileMenu, setDesktopProfileMenu] = useState(false);
   const [mobileProfileMenu, setMobileProfileMenu] = useState(false);
 
@@ -27,14 +28,41 @@ function Layout({ children }) {
   };
 
   useEffect(() => {
-    onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setSession(user);
+
+        try {
+          const snap = await getDoc(doc(db, "users", user.uid));
+          const data = snap.exists() ? snap.data() : {};
+
+          setProfile({
+            fullName: data.fullName || user.displayName || "",
+            photoURL: data.photoURL || user.photoURL || "/images/avatar.png",
+          });
+        } catch (error) {
+          console.log(error);
+          setProfile({
+            fullName: user.displayName || "",
+            photoURL: user.photoURL || "/images/avatar.png",
+          });
+        }
       } else {
         setSession(false);
+        setProfile(null);
       }
     });
+
+    return () => unsubscribe();
   }, []);
+
+  const displayName =
+    profile?.fullName ||
+    session?.displayName ||
+    session?.email?.split("@")[0] ||
+    "User";
+  const avatarUrl =
+    profile?.photoURL || session?.photoURL || "/images/avatar.png";
 
   const menus = [
     { label: "Home", href: "/" },
@@ -130,13 +158,16 @@ function Layout({ children }) {
                     onClick={() => setDesktopProfileMenu(!desktopProfileMenu)}
                     className="flex items-center gap-2 font-medium hover:text-yellow-600 transition cursor-pointer"
                   >
-                    <span>Hi, {session?.displayName || session?.email?.split("@")[0]} 😊</span>
-                    <img className="h-9 w-9 rounded-full border border-gray-200 shadow-sm" src="/images/avatar.png" alt="Avatar" />
+                    <span className="capitalize">Hi, {displayName}</span>
+                    <img
+                      className="h-9 w-9 rounded-full border border-gray-200 shadow-sm object-cover"
+                      src={avatarUrl}
+                      alt="Avatar"
+                      onError={(e) => (e.target.src = "/images/avatar.png")}
+                    />
                   </button>
                   {desktopProfileMenu && (
-                    <div
-                      className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
-                    >
+                    <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                       <Link
                         to="/profile"
                         onClick={() => setDesktopProfileMenu(false)}
@@ -234,22 +265,34 @@ function Layout({ children }) {
                 className="w-full flex items-center justify-between p-3 rounded-2xl bg-gray-50 border border-gray-100 hover:bg-gray-100 transition cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <img className="h-10 w-10 rounded-full border border-gray-200" src="/images/avatar.png" alt="Avatar" />
+                  <img
+                    className="h-10 w-10 rounded-full border border-gray-200 object-cover"
+                    src={avatarUrl}
+                    alt="Avatar"
+                    onError={(e) => (e.target.src = "/images/avatar.png")}
+                  />
                   <div className="text-left">
-                    <p className="text-xs text-gray-500 font-medium">Logged in as</p>
+                    <p className="text-xs text-gray-500 font-medium">
+                      Logged in as
+                    </p>
                     <p className="text-sm font-bold text-gray-800">
-                      {session?.displayName || session?.email?.split("@")[0]}
+                      {displayName}
                     </p>
                   </div>
                 </div>
-                <i className={`ri-arrow-${mobileProfileMenu ? "up" : "down"}-s-line text-lg text-gray-500 transition`}></i>
+                <i
+                  className={`ri-arrow-${mobileProfileMenu ? "up" : "down"}-s-line text-lg text-gray-500 transition`}
+                ></i>
               </button>
 
               {mobileProfileMenu && (
                 <div className="mt-2 bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-lg py-1 animate-in fade-in slide-in-from-top-2 duration-200">
                   <Link
                     to="/profile"
-                    onClick={() => { setIsOpen(false); setMobileProfileMenu(false); }}
+                    onClick={() => {
+                      setIsOpen(false);
+                      setMobileProfileMenu(false);
+                    }}
                     className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition"
                   >
                     <i className="ri-user-line text-lg"></i>
@@ -257,7 +300,10 @@ function Layout({ children }) {
                   </Link>
                   <Link
                     to="/cart"
-                    onClick={() => { setIsOpen(false); setMobileProfileMenu(false); }}
+                    onClick={() => {
+                      setIsOpen(false);
+                      setMobileProfileMenu(false);
+                    }}
                     className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition"
                   >
                     <i className="ri-shopping-cart-line text-lg"></i>
@@ -265,7 +311,10 @@ function Layout({ children }) {
                   </Link>
                   <div className="border-t border-gray-100 my-1"></div>
                   <button
-                    onClick={() => { setIsOpen(false); handleLogout(); }}
+                    onClick={() => {
+                      setIsOpen(false);
+                      handleLogout();
+                    }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition text-left cursor-pointer"
                   >
                     <i className="ri-logout-circle-r-line text-lg"></i>
